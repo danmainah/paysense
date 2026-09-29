@@ -70,6 +70,9 @@ prisma/
 
 ## Common Gotchas
 
+- `ADMIN_PASSWORD_HASH` in `.env.local` must be **base64-encoded** (not raw bcrypt) — dotenv-expand strips `$` signs from unquoted values. Generate: `node -e "console.log(Buffer.from(hash).toString('base64'))"`. `auth.ts` decodes it back with `Buffer.from(val,'base64').toString('utf8')`.
+- Admin credentials: email=`admin@paysense.co`, password=`admin123` (set during Day 2 setup).
+
 - `pgvector` extension must be enabled on the database: `CREATE EXTENSION IF NOT EXISTS vector;`
 - M-Pesa callback needs a **public HTTPS URL**. Use ngrok locally: `ngrok http 3000`, then set `MPESA_CALLBACK_URL=https://<id>.ngrok.io`.
 - Stripe webhook forwarding: `stripe listen --forward-to localhost:3000/api/webhooks/stripe` — this sets the webhook secret.
