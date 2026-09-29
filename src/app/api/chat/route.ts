@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   const chunks = await retrieveRelevantChunks(query);
   const systemPrompt = buildSystemPrompt(chunks);
 
-  const result = await streamText({
+  const result = streamText({
     model: google('gemini-flash-latest'),
     system: systemPrompt,
     messages,
