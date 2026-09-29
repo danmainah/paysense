@@ -1,0 +1,53 @@
+{
+  "name": "paysense",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "db:push": "dotenv -e .env.local -- prisma db push",
+    "db:generate": "prisma generate",
+    "db:studio": "dotenv -e .env.local -- prisma studio",
+    "db:seed": "dotenv -e .env.local -- tsx prisma/seed.ts",
+    "hash-password": "node -e \"const b=require('bcryptjs');console.log(b.hashSync(process.argv[1],12))\" --"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^1.2.22",
+    "@google/generative-ai": "^0.24.1",
+    "@prisma/client": "^5.21.1",
+    "ai": "^4.3.19",
+    "axios": "^1.7.7",
+    "bcryptjs": "^2.4.3",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "next": "14.2.15",
+    "next-auth": "^4.24.10",
+    "pdf-parse": "^1.1.1",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "react-dropzone": "^14.2.3",
+    "react-markdown": "^9.0.1",
+    "remark-gfm": "^4.0.0",
+    "stripe": "^16.12.0",
+    "tailwind-merge": "^2.5.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.20",
+    "dotenv-cli": "^11.0.0",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.15",
+    "postcss": "^8",
+    "prisma": "^5.21.1",
+    "tailwindcss": "^3.4.14",
+    "tsx": "^4.19.1",
+    "typescript": "^5"
+  }
+}

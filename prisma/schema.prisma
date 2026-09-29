@@ -1,0 +1,71 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  title      String
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
+  chunks     Chunk[]
+
+  @@map("documents")
+}
+
+// embedding column is managed via raw SQL — Prisma doesn't support vector natively
+model Chunk {
+  id         String   @id @default(cuid())
+  documentId String   @map("document_id")
+  content    String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("chunks")
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now()) @map("created_at")
+  messages  Message[]
+
+  @@map("conversations")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String       @map("conversation_id")
+  role           String
+  content        String
+  createdAt      DateTime     @default(now()) @map("created_at")
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model Order {
+  id          String   @id @default(cuid())
+  items       Json
+  amount      Int
+  currency    String   @default("KES")
+  provider    String
+  status      String   @default("pending")
+  providerRef String?  @map("provider_ref")
+  phone       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("orders")
+}
+
+model UnansweredQuestion {
+  id        String   @id @default(cuid())
+  question  String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("unanswered_questions")
+}
