@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   const systemPrompt = buildSystemPrompt(chunks);
 
   const result = streamText({
-    model: google('gemini-flash-latest'),
+    model: google('gemini-flash-lite-latest'),
     system: systemPrompt,
     messages,
     maxSteps: 5,
