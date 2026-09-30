@@ -30,9 +30,10 @@ npm run hash-password <pw>  # bcrypt hash for ADMIN_PASSWORD_HASH
 
 ## Key Patterns
 
-- **RAG flow**: user message → OpenAI embedding → pgvector cosine search → top-5 chunks injected into system prompt → Claude streams answer with citations.
-- **Tool calling**: Claude calls `create_stripe_checkout` or `mpesa_stk_push`; tools run server-side, price recalculated from intent — never trust the model's amount directly.
-- **Webhooks**: `/api/webhooks/stripe` and `/api/webhooks/mpesa` update `orders.status`; all signatures verified before touching the DB.
+- **RAG flow**: user message → Google embedding → pgvector cosine search → top-5 chunks + the live product catalog injected into the system prompt → Gemini streams the answer.
+- **Product catalog**: managed in `/admin/products` (CRUD via `/api/admin/products`), stored in the `products` table, and injected into the chat system prompt by `getProductCatalog()` — the assistant treats it as authoritative for names/prices/availability.
+- **Tool calling**: the model calls `create_stripe_checkout`, `mpesa_stk_push`, or `lookup_order`; tools run server-side, price recalculated from intent — never trust the model's amount directly. Every order gets an 8-char `reference` (see `lib/orders.ts`) shown to the customer and used for lookup.
+- **Webhooks**: `/api/webhooks/stripe` and `/api/webhooks/mpesa` update `orders.status` (signatures verified first) and send an email receipt via `lib/email.ts` (Resend) when the order has an email.
 - **Auth**: single admin via `ADMIN_EMAIL` + `ADMIN_PASSWORD_HASH` (bcrypt). `AdminLayout` enforces session server-side.
 
 ## File Map
@@ -57,11 +58,14 @@ src/
     admin/
   lib/
     db.ts                      ← Prisma singleton
-    embeddings.ts              ← OpenAI embedding helpers
+    embeddings.ts              ← Google gemini-embedding-001 helpers
     chunker.ts                 ← PDF/Markdown → chunks
-    rag.ts                     ← retrieval + system prompt builder
+    rag.ts                     ← retrieval + product catalog + system prompt builder
     stripe.ts                  ← Stripe client + checkout helper
     mpesa.ts                   ← Daraja STK push
+    payment-tools.ts           ← create_stripe_checkout / mpesa_stk_push executors
+    orders.ts                  ← order reference generation + lookup_order
+    email.ts                   ← Resend receipt sender (no-op if unconfigured)
     auth.ts                    ← NextAuth options
 prisma/
   schema.prisma
@@ -78,4 +82,5 @@ prisma/
 - M-Pesa callback needs a **public HTTPS URL**. Use ngrok locally: `ngrok http 3000`, then set `MPESA_CALLBACK_URL=https://<id>.ngrok.io`.
 - Stripe webhook forwarding: `stripe listen --forward-to localhost:3000/api/webhooks/stripe` — this sets the webhook secret.
 - `pdf-parse` is listed in `serverComponentsExternalPackages` in next.config.ts to avoid bundling issues.
-- The `embedding` column uses `Unsupported("vector(1536)")` in Prisma — all inserts/queries use `prisma.$executeRaw` / `prisma.$queryRaw`.
+- The `embedding` column is `vector(3072)` (gemini-embedding-001), created via raw SQL in `prisma/seed.ts` and declared in `schema.prisma` as `Unsupported("vector(3072)")?` so `db push` doesn't drop it. All inserts/queries use `prisma.$executeRaw` / `prisma.$queryRaw`. (An earlier note said 1536 — that was wrong.)
+- **Email receipts** need `RESEND_API_KEY` (and optionally `RECEIPT_FROM_EMAIL`, default `onboarding@resend.dev`). If unset, `sendReceipt()` logs and no-ops — payments still succeed. Stripe supplies the customer email automatically; for M-Pesa the assistant must collect it (optional `email` arg on `mpesa_stk_push`).
