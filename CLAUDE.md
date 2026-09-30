@@ -8,8 +8,8 @@ Demo shop: **TechNairobi Electronics** (Nairobi, Kenya).
 
 - **Framework**: Next.js 14 App Router + TypeScript
 - **Styling**: Tailwind CSS
-- **AI / Streaming**: Vercel AI SDK v3 (`ai`, `@ai-sdk/google`)
-- **LLM**: `gemini-flash-latest` (always latest Gemini Flash) — free tier via Google AI Studio (chat + tool calling)
+- **AI / Streaming**: Vercel AI SDK v4 (`ai@4`, `@ai-sdk/google@1`)
+- **LLM**: `gemini-3.5-flash-lite` — free tier via Google AI Studio (chat + tool calling). It's a *thinking* model, so multi-step tool calls need the `thought_signature` patch (see Gotchas).
 - **Embeddings**: Google `gemini-embedding-001` (3072-dim) via `@google/generative-ai` — free
 - **Database**: Postgres + pgvector via Prisma ORM (Neon/Supabase)
 - **Payments**: Stripe Checkout + M-Pesa Daraja STK Push
@@ -70,6 +70,7 @@ prisma/
 
 ## Common Gotchas
 
+- **`thought_signature` patch (payments depend on this).** `gemini-3.5-flash-lite` is a thinking model: it returns a `thoughtSignature` at the **part level** (sibling of `functionCall`, NOT inside it) and *requires* it echoed back on step 2 of a multi-step tool call, or the API 400s with "Function call is missing a thought_signature". `@ai-sdk/google@1.2.22` doesn't know about it — its Zod schema strips it and it never sends it back. Fixed via `patches/@ai-sdk+google+1.2.22.patch` (applied automatically by the `postinstall` → `patch-package` hook). The patch adds a module-level `Map` keyed by `toolCallId` that bridges the signature from response-parsing (`getToolCallsFromParts`) to request-rebuilding (`convertToGoogleGenerativeAIMessages`). Both `dist/index.js` (CJS) and `dist/index.mjs` (ESM, what the Next dev server actually loads) are patched. **If tool calls suddenly 400 after `npm install`, check the patch applied.**
 - `ADMIN_PASSWORD_HASH` in `.env.local` must be **base64-encoded** (not raw bcrypt) — dotenv-expand strips `$` signs from unquoted values. Generate: `node -e "console.log(Buffer.from(hash).toString('base64'))"`. `auth.ts` decodes it back with `Buffer.from(val,'base64').toString('utf8')`.
 - Admin credentials: email=`admin@paysense.co`, password=`admin123` (set during Day 2 setup).
 

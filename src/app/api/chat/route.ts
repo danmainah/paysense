@@ -25,7 +25,10 @@ export async function POST(req: NextRequest) {
   const systemPrompt = buildSystemPrompt(chunks);
 
   const result = streamText({
-    model: google('gemini-flash-lite-latest'),
+    onError: (err) => console.error('[Chat] streamText error:', err),
+    // gemini-3.5-flash-lite is a thinking model; the patched @ai-sdk/google
+    // bridges the part-level thought_signature so multi-step tool calls work.
+    model: google('gemini-3.5-flash-lite'),
     system: systemPrompt,
     messages,
     maxSteps: 5,

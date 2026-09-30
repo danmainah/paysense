@@ -1,0 +1,114 @@
+diff --git a/node_modules/@ai-sdk/google/dist/index.js b/node_modules/@ai-sdk/google/dist/index.js
+index 84c2834..85d3f41 100644
+--- a/node_modules/@ai-sdk/google/dist/index.js
++++ b/node_modules/@ai-sdk/google/dist/index.js
+@@ -1,4 +1,6 @@
+ "use strict";
++// thought_signature bridge: keyed by toolCallId, survives SDK internal conversion
++const _thoughtSignatureMap = new Map();
+ var __defProp = Object.defineProperty;
+ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+ var __getOwnPropNames = Object.getOwnPropertyNames;
+@@ -222,11 +224,14 @@ function convertToGoogleGenerativeAIMessages(prompt) {
+                 };
+               }
+               case "tool-call": {
++                const sig = _thoughtSignatureMap.get(part.toolCallId);
++                if (sig) _thoughtSignatureMap.delete(part.toolCallId);
+                 return {
+                   functionCall: {
+                     name: part.toolName,
+                     args: part.args
+-                  }
++                  },
++                  ...(sig ? { thoughtSignature: sig } : {})
+                 };
+               }
+             }
+@@ -735,12 +740,13 @@ function getToolCallsFromParts({
+   const functionCallParts = parts == null ? void 0 : parts.filter(
+     (part) => "functionCall" in part
+   );
+-  return functionCallParts == null || functionCallParts.length === 0 ? void 0 : functionCallParts.map((part) => ({
+-    toolCallType: "function",
+-    toolCallId: generateId2(),
+-    toolName: part.functionCall.name,
+-    args: JSON.stringify(part.functionCall.args)
+-  }));
++  return functionCallParts == null || functionCallParts.length === 0 ? void 0 : functionCallParts.map((part) => {
++    const toolCallId = generateId2();
++    if (part.thoughtSignature) {
++      _thoughtSignatureMap.set(toolCallId, part.thoughtSignature);
++    }
++    return { toolCallType: "function", toolCallId, toolName: part.functionCall.name, args: JSON.stringify(part.functionCall.args) };
++  });
+ }
+ function getTextFromParts(parts) {
+   const textParts = parts == null ? void 0 : parts.filter(
+@@ -781,7 +787,8 @@ var contentSchema = import_zod2.z.object({
+         functionCall: import_zod2.z.object({
+           name: import_zod2.z.string(),
+           args: import_zod2.z.unknown()
+-        })
++        }),
++        thoughtSignature: import_zod2.z.string().optional()
+       }),
+       import_zod2.z.object({
+         inlineData: import_zod2.z.object({
+diff --git a/node_modules/@ai-sdk/google/dist/index.mjs b/node_modules/@ai-sdk/google/dist/index.mjs
+index e49aebf..1b3bc02 100644
+--- a/node_modules/@ai-sdk/google/dist/index.mjs
++++ b/node_modules/@ai-sdk/google/dist/index.mjs
+@@ -1,3 +1,6 @@
++// thought_signature bridge (part-level, Gemini 2.5+): keyed by toolCallId
++const _thoughtSignatureMap = new Map();
++
+ // src/google-provider.ts
+ import {
+   generateId,
+@@ -208,11 +211,14 @@ function convertToGoogleGenerativeAIMessages(prompt) {
+                 };
+               }
+               case "tool-call": {
++                const sig = _thoughtSignatureMap.get(part.toolCallId);
++                if (sig) _thoughtSignatureMap.delete(part.toolCallId);
+                 return {
+                   functionCall: {
+                     name: part.toolName,
+                     args: part.args
+-                  }
++                  },
++                  ...(sig ? { thoughtSignature: sig } : {})
+                 };
+               }
+             }
+@@ -723,12 +729,13 @@ function getToolCallsFromParts({
+   const functionCallParts = parts == null ? void 0 : parts.filter(
+     (part) => "functionCall" in part
+   );
+-  return functionCallParts == null || functionCallParts.length === 0 ? void 0 : functionCallParts.map((part) => ({
+-    toolCallType: "function",
+-    toolCallId: generateId2(),
+-    toolName: part.functionCall.name,
+-    args: JSON.stringify(part.functionCall.args)
+-  }));
++  return functionCallParts == null || functionCallParts.length === 0 ? void 0 : functionCallParts.map((part) => {
++    const toolCallId = generateId2();
++    if (part.thoughtSignature) {
++      _thoughtSignatureMap.set(toolCallId, part.thoughtSignature);
++    }
++    return { toolCallType: "function", toolCallId, toolName: part.functionCall.name, args: JSON.stringify(part.functionCall.args) };
++  });
+ }
+ function getTextFromParts(parts) {
+   const textParts = parts == null ? void 0 : parts.filter(
+@@ -769,7 +776,8 @@ var contentSchema = z2.object({
+         functionCall: z2.object({
+           name: z2.string(),
+           args: z2.unknown()
+-        })
++        }),
++        thoughtSignature: z2.string().optional()
+       }),
+       z2.object({
+         inlineData: z2.object({
