@@ -13,6 +13,7 @@
     "db:generate": "prisma generate",
     "db:studio": "dotenv -e .env.local -- prisma studio",
     "db:seed": "dotenv -e .env.local -- tsx prisma/seed.ts",
+    "db:seed-products": "dotenv -e .env.local -- tsx prisma/seed-products.ts",
     "hash-password": "node -e \"const b=require('bcryptjs');console.log(b.hashSync(process.argv[1],12))\" --"
   },
   "dependencies": {
