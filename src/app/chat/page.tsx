@@ -1,29 +1,8 @@
 'use client';
 
 import { Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ChatInterface } from '@/components/chat/ChatInterface';
-
-function PaymentBanner() {
-  const params = useSearchParams();
-  const payment = params.get('payment');
-  if (!payment) return null;
-
-  return (
-    <div
-      className={`px-4 py-3 text-sm text-center font-medium ${
-        payment === 'success'
-          ? 'bg-green-500 text-white'
-          : 'bg-amber-400 text-amber-900'
-      }`}
-    >
-      {payment === 'success'
-        ? '✅ Payment received — thank you!'
-        : '⚠️ Payment cancelled. You can retry anytime.'}
-    </div>
-  );
-}
 
 export default function ChatPage() {
   return (
@@ -45,10 +24,8 @@ export default function ChatPage() {
       </header>
 
       <Suspense>
-        <PaymentBanner />
+        <ChatInterface />
       </Suspense>
-
-      <ChatInterface />
     </div>
   );
 }

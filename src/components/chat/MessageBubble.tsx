@@ -1,6 +1,7 @@
 'use client';
 
 import type { Message, ToolInvocation } from 'ai';
+import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -56,8 +57,6 @@ function ToolResult({ invocation }: { invocation: ToolInvocation }) {
           </p>
           <a
             href={r.paymentUrl}
-            target="_blank"
-            rel="noopener noreferrer"
             className="inline-block bg-blue-600 text-white text-xs font-medium px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
             Pay with Card →
@@ -106,9 +105,54 @@ function ToolResult({ invocation }: { invocation: ToolInvocation }) {
 }
 
 function OrderStatusPoll({ orderId }: { orderId: string }) {
+  const [status, setStatus] = useState<'pending' | 'completed' | 'failed'>('pending');
+  const [attempts, setAttempts] = useState(0);
+
+  useEffect(() => {
+    if (status === 'completed' || status === 'failed') return;
+    if (attempts >= 40) return; // give up after ~2 min of polling
+
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/orders/${orderId}`);
+        if (res.ok) {
+          const data = (await res.json()) as { status?: string };
+          if (data.status === 'completed' || data.status === 'failed') {
+            setStatus(data.status);
+          }
+        }
+      } catch {
+        /* transient network error — will retry on next tick */
+      } finally {
+        setAttempts((n) => n + 1);
+      }
+    }, 3000);
+
+    return () => clearTimeout(t);
+  }, [orderId, status, attempts]);
+
+  const ref = orderId.slice(-8).toUpperCase();
+
+  if (status === 'completed') {
+    return (
+      <p className="mt-1.5 text-green-700 font-medium text-xs">
+        ✅ Payment confirmed! · <span className="font-mono text-[10px]">Order {ref}</span>
+      </p>
+    );
+  }
+
+  if (status === 'failed') {
+    return (
+      <p className="mt-1.5 text-red-600 font-medium text-xs">
+        ❌ Payment not completed. · <span className="font-mono text-[10px]">Order {ref}</span>
+      </p>
+    );
+  }
+
   return (
-    <p className="mt-1.5 text-green-600 font-mono text-[10px]">
-      Order: {orderId.slice(-8).toUpperCase()}
+    <p className="mt-1.5 text-green-600 font-mono text-[10px] flex items-center gap-1.5">
+      <span className="w-2.5 h-2.5 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+      Order {ref} · waiting for confirmation…
     </p>
   );
 }

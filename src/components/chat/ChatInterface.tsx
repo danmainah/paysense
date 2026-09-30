@@ -1,31 +1,115 @@
 'use client';
 
 import { useChat } from 'ai/react';
+import type { Message } from 'ai';
 import { useEffect, useRef } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { MessageBubble } from './MessageBubble';
 
 const WELCOME =
   "Hi! I'm the TechNairobi AI assistant. Ask me about our products, prices, delivery, or anything else — and I can help you pay via M-Pesa or card right here. How can I help you today?";
 
-export function ChatInterface() {
-  const conversationId = useRef(crypto.randomUUID());
-  const bottomRef = useRef<HTMLDivElement>(null);
+const STORAGE_KEY = 'paysense_chat_messages';
+const CONV_KEY = 'paysense_conversation_id';
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
-    api: '/api/chat',
-    body: { conversationId: conversationId.current },
-    initialMessages: [
-      {
-        id: 'welcome',
+// Stable conversation id that survives the Stripe redirect (even in a new tab,
+// so localStorage — shared across tabs — rather than sessionStorage).
+function getConversationId(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const existing = localStorage.getItem(CONV_KEY);
+    if (existing) return existing;
+    const fresh = crypto.randomUUID();
+    localStorage.setItem(CONV_KEY, fresh);
+    return fresh;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+export function ChatInterface() {
+  const conversationId = useRef<string>('');
+  if (!conversationId.current) conversationId.current = getConversationId();
+
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const params = useSearchParams();
+  const router = useRouter();
+
+  const { messages, setMessages, input, handleInputChange, handleSubmit, isLoading, error } =
+    useChat({
+      api: '/api/chat',
+      body: { conversationId: conversationId.current },
+      initialMessages: [{ id: 'welcome', role: 'assistant', content: WELCOME }],
+    });
+
+  // On mount: restore saved conversation, then append any payment-result message.
+  const initialized = useRef(false);
+  useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
+    // 1. Restore prior conversation (survives the Stripe redirect / refresh).
+    let base: Message[] | null = null;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved) as Message[];
+        if (Array.isArray(parsed) && parsed.length > 0) base = parsed;
+      }
+    } catch {
+      /* ignore corrupt storage */
+    }
+
+    // 2. If we returned from a Stripe redirect, build an in-chat confirmation.
+    const payment = params.get('payment');
+    let paymentMsg: Message | null = null;
+    if (payment) {
+      const order = params.get('order');
+      const ref = order ? order.slice(-8).toUpperCase() : null;
+      paymentMsg = {
+        id: `payment-${Date.now()}`,
         role: 'assistant',
-        content: WELCOME,
-      },
-    ],
-  });
+        content:
+          payment === 'success'
+            ? `✅ **Payment received — thank you!**${ref ? ` Your order reference is \`${ref}\`.` : ''} Is there anything else I can help you with about your purchase?`
+            : '⚠️ **Payment was cancelled.** No problem — let me know if you’d like to try again or have any other questions.',
+      };
+      // Clean the query string so a refresh doesn't re-add the message.
+      router.replace('/chat');
+    }
+
+    // 3. Apply restored history + payment message in one update.
+    if (base || paymentMsg) {
+      setMessages((prev) => {
+        const start = base ?? prev;
+        return paymentMsg ? [...start, paymentMsg] : start;
+      });
+    }
+  }, [params, router, setMessages]);
+
+  // Persist the conversation on every change so it survives redirects.
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    } catch {
+      /* storage full / unavailable — non-fatal */
+    }
+  }, [messages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Clear the stored conversation and start fresh (full reload gives useChat a new conversationId).
+  const resetChat = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(CONV_KEY);
+    } catch {
+      /* non-fatal */
+    }
+    window.location.href = '/chat';
+  };
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -86,6 +170,17 @@ export function ChatInterface() {
         onSubmit={handleSubmit}
         className="border-t bg-white px-4 py-3 flex gap-2 shrink-0"
       >
+        {messages.length > 1 && (
+          <button
+            type="button"
+            onClick={resetChat}
+            title="Start a new chat"
+            aria-label="Start a new chat"
+            className="shrink-0 w-10 h-10 rounded-full border border-gray-200 text-gray-400 hover:text-gray-600 hover:bg-gray-50 flex items-center justify-center transition-colors"
+          >
+            ↻
+          </button>
+        )}
         <input
           value={input}
           onChange={handleInputChange}
