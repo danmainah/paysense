@@ -2,8 +2,9 @@ import { streamText, tool } from 'ai';
 import { google } from '@ai-sdk/google';
 import { z } from 'zod';
 import { type NextRequest } from 'next/server';
-import { retrieveRelevantChunks, buildSystemPrompt } from '@/lib/rag';
+import { retrieveRelevantChunks, buildSystemPrompt, getProductCatalog } from '@/lib/rag';
 import { executeStripeCheckout, executeMpesaStk } from '@/lib/payment-tools';
+import { lookupOrder } from '@/lib/orders';
 import { trackUnansweredQuestion, persistConversation } from '@/lib/conversation';
 
 export const runtime = 'nodejs';
@@ -21,8 +22,11 @@ export async function POST(req: NextRequest) {
   const lastUserMsg = [...messages].reverse().find((m: { role: string }) => m.role === 'user');
   const query = lastUserMsg?.content ?? '';
 
-  const chunks = await retrieveRelevantChunks(query);
-  const systemPrompt = buildSystemPrompt(chunks);
+  const [chunks, products] = await Promise.all([
+    retrieveRelevantChunks(query),
+    getProductCatalog(),
+  ]);
+  const systemPrompt = buildSystemPrompt(chunks, products);
 
   const result = streamText({
     onError: (err) => console.error('[Chat] streamText error:', err),
@@ -42,12 +46,22 @@ export async function POST(req: NextRequest) {
 
       mpesa_stk_push: tool({
         description:
-          "Send an M-Pesa STK push payment request to the customer's phone. Ask for their phone number first (format: 254XXXXXXXXX).",
+          "Send an M-Pesa STK push payment request to the customer's phone. Ask for their phone number first (format: 254XXXXXXXXX). Optionally pass their email to send a receipt after payment.",
         parameters: z.object({
           phone: z.string().describe('Phone number in format 254XXXXXXXXX'),
           items: z.array(itemSchema),
+          email: z.string().email().optional().describe('Customer email for a payment receipt (optional)'),
         }),
-        execute: ({ phone, items }) => executeMpesaStk(phone, items),
+        execute: ({ phone, items, email }) => executeMpesaStk(phone, items, email),
+      }),
+
+      lookup_order: tool({
+        description:
+          'Look up the status of an existing order using the customer\'s order reference (the 8-character code from their confirmation, e.g. "K7P2M9QX").',
+        parameters: z.object({
+          reference: z.string().describe('The order reference code, e.g. K7P2M9QX'),
+        }),
+        execute: ({ reference }) => lookupOrder(reference),
       }),
     },
 

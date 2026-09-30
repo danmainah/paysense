@@ -42,7 +42,7 @@ function ToolResult({ invocation }: { invocation: ToolInvocation }) {
       );
     }
     if (invocation.state === 'result') {
-      const r = invocation.result as { paymentUrl?: string; totalAmount?: number; success: boolean };
+      const r = invocation.result as { paymentUrl?: string; totalAmount?: number; success: boolean; reference?: string };
       if (!r.success) {
         return (
           <div className="mt-3 p-3 bg-red-50 rounded-xl border border-red-100 text-xs text-red-700">
@@ -61,6 +61,9 @@ function ToolResult({ invocation }: { invocation: ToolInvocation }) {
           >
             Pay with Card →
           </a>
+          {r.reference && (
+            <p className="mt-2 text-[10px] text-gray-400 font-mono">Order {r.reference}</p>
+          )}
         </div>
       );
     }
@@ -76,7 +79,7 @@ function ToolResult({ invocation }: { invocation: ToolInvocation }) {
       );
     }
     if (invocation.state === 'result') {
-      const r = invocation.result as { success: boolean; orderId?: string };
+      const r = invocation.result as { success: boolean; orderId?: string; reference?: string };
       return (
         <div
           className={`mt-3 p-3 rounded-xl border text-xs ${
@@ -90,7 +93,7 @@ function ToolResult({ invocation }: { invocation: ToolInvocation }) {
               <p className="font-medium mb-1">📱 M-Pesa request sent</p>
               <p>Check your phone, enter your PIN, and the payment will be confirmed.</p>
               {r.orderId && (
-                <OrderStatusPoll orderId={r.orderId} />
+                <OrderStatusPoll orderId={r.orderId} reference={r.reference} />
               )}
             </>
           ) : (
@@ -104,7 +107,7 @@ function ToolResult({ invocation }: { invocation: ToolInvocation }) {
   return null;
 }
 
-function OrderStatusPoll({ orderId }: { orderId: string }) {
+function OrderStatusPoll({ orderId, reference }: { orderId: string; reference?: string }) {
   const [status, setStatus] = useState<'pending' | 'completed' | 'failed'>('pending');
   const [attempts, setAttempts] = useState(0);
 
@@ -131,7 +134,7 @@ function OrderStatusPoll({ orderId }: { orderId: string }) {
     return () => clearTimeout(t);
   }, [orderId, status, attempts]);
 
-  const ref = orderId.slice(-8).toUpperCase();
+  const ref = reference ?? orderId.slice(-8).toUpperCase();
 
   if (status === 'completed') {
     return (

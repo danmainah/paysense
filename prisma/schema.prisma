@@ -23,6 +23,8 @@ model Chunk {
   id         String   @id @default(cuid())
   documentId String   @map("document_id")
   content    String
+  // Managed via raw SQL (see prisma/seed.ts). Declared here so `db push` doesn't drop it.
+  embedding  Unsupported("vector(3072)")?
   document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@map("chunks")
@@ -49,6 +51,7 @@ model Message {
 
 model Order {
   id          String   @id @default(cuid())
+  reference   String?  @unique
   items       Json
   amount      Int
   currency    String   @default("KES")
@@ -56,10 +59,24 @@ model Order {
   status      String   @default("pending")
   providerRef String?  @map("provider_ref")
   phone       String?
+  email       String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("orders")
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Int // KES, whole shillings
+  category    String?
+  inStock     Boolean  @default(true) @map("in_stock")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("products")
 }
 
 model UnansweredQuestion {

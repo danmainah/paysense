@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { stripe } from '@/lib/stripe';
 import { prisma } from '@/lib/db';
+import { sendReceipt } from '@/lib/email';
 
 export const runtime = 'nodejs';
 
@@ -24,7 +25,13 @@ export async function POST(req: NextRequest) {
       const session = event.data.object as Stripe.Checkout.Session;
       const orderId = session.metadata?.orderId;
       if (orderId) {
-        await prisma.order.update({ where: { id: orderId }, data: { status: 'completed' } });
+        const email = session.customer_details?.email ?? null;
+        const order = await prisma.order.update({
+          where: { id: orderId },
+          data: { status: 'completed', ...(email ? { email } : {}) },
+        });
+        // Fire-and-forget receipt — never let email failure break the webhook.
+        await sendReceipt(order).catch((e) => console.error('[Webhook/Stripe] receipt failed:', e));
       }
     }
 

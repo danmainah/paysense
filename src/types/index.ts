@@ -17,6 +17,17 @@ export interface Order {
   updatedAt: string;
 }
 
+export interface Product {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  category: string | null;
+  inStock: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DocumentWithCount {
   id: string;
   title: string;

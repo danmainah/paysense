@@ -2,6 +2,7 @@ import { type Prisma } from '@prisma/client';
 import { prisma } from './db';
 import { createCheckoutSession } from './stripe';
 import { stkPush } from './mpesa';
+import { generateOrderReference } from './orders';
 
 export interface OrderItem {
   name: string;
@@ -13,6 +14,7 @@ export interface StripeToolResult {
   success: boolean;
   paymentUrl: string | null;
   orderId: string;
+  reference: string;
   totalAmount: number;
   message: string;
 }
@@ -20,6 +22,7 @@ export interface StripeToolResult {
 export interface MpesaToolResult {
   success: boolean;
   orderId: string;
+  reference: string;
   message: string;
 }
 
@@ -29,11 +32,12 @@ function calcTotal(items: OrderItem[]): number {
 
 export async function executeStripeCheckout(items: OrderItem[]): Promise<StripeToolResult> {
   const amount = calcTotal(items);
+  const reference = generateOrderReference();
 
   let order: { id: string };
   try {
     order = await prisma.order.create({
-      data: { items: items as unknown as Prisma.InputJsonValue, amount, currency: 'KES', provider: 'stripe', status: 'pending' },
+      data: { reference, items: items as unknown as Prisma.InputJsonValue, amount, currency: 'KES', provider: 'stripe', status: 'pending' },
     });
   } catch (err: unknown) {
     console.error('[Stripe] Order create failed:', err);
@@ -41,6 +45,7 @@ export async function executeStripeCheckout(items: OrderItem[]): Promise<StripeT
       success: false,
       paymentUrl: null,
       orderId: 'unknown',
+      reference,
       totalAmount: amount,
       message: `Failed to create order: ${err instanceof Error ? err.message : 'DB error'}. Please try again.`,
     };
@@ -58,8 +63,9 @@ export async function executeStripeCheckout(items: OrderItem[]): Promise<StripeT
       success: true,
       paymentUrl: url,
       orderId: order.id,
+      reference,
       totalAmount: amount,
-      message: `I've created a secure payment link for KES ${amount.toLocaleString()}. Click below to pay with your card.`,
+      message: `I've created a secure payment link for KES ${amount.toLocaleString()}. Your order reference is ${reference}. Click below to pay with your card.`,
     };
   } catch (err: unknown) {
     console.error('[Stripe] Checkout session failed:', err);
@@ -68,25 +74,41 @@ export async function executeStripeCheckout(items: OrderItem[]): Promise<StripeT
       success: false,
       paymentUrl: null,
       orderId: order.id,
+      reference,
       totalAmount: amount,
       message: `Failed to create payment link: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`,
     };
   }
 }
 
-export async function executeMpesaStk(phone: string, items: OrderItem[]): Promise<MpesaToolResult> {
+export async function executeMpesaStk(
+  phone: string,
+  items: OrderItem[],
+  email?: string
+): Promise<MpesaToolResult> {
   const amount = calcTotal(items);
+  const reference = generateOrderReference();
 
   let order: { id: string };
   try {
     order = await prisma.order.create({
-      data: { items: items as unknown as Prisma.InputJsonValue, amount, currency: 'KES', provider: 'mpesa', status: 'pending', phone },
+      data: {
+        reference,
+        items: items as unknown as Prisma.InputJsonValue,
+        amount,
+        currency: 'KES',
+        provider: 'mpesa',
+        status: 'pending',
+        phone,
+        email: email ?? null,
+      },
     });
   } catch (err: unknown) {
     console.error('[M-Pesa] Order create failed:', err);
     return {
       success: false,
       orderId: 'unknown',
+      reference,
       message: `Failed to create order: ${err instanceof Error ? err.message : 'DB error'}. Please try again.`,
     };
   }
@@ -102,7 +124,8 @@ export async function executeMpesaStk(phone: string, items: OrderItem[]): Promis
     return {
       success: true,
       orderId: order.id,
-      message: `An M-Pesa request of KES ${amount.toLocaleString()} has been sent to ${phone}. Please check your phone and enter your M-Pesa PIN to complete the payment.`,
+      reference,
+      message: `An M-Pesa request of KES ${amount.toLocaleString()} has been sent to ${phone}. Your order reference is ${reference}. Please check your phone and enter your M-Pesa PIN to complete the payment.`,
     };
   } catch (err: unknown) {
     console.error('[M-Pesa] STK push failed:', err);
@@ -111,6 +134,7 @@ export async function executeMpesaStk(phone: string, items: OrderItem[]): Promis
     return {
       success: false,
       orderId: order.id,
+      reference,
       message: `Failed to send M-Pesa request: ${message}. Please try again or use card payment.`,
     };
   }

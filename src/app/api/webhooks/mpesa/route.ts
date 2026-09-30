@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { sendReceipt } from '@/lib/email';
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,10 +19,13 @@ export async function POST(req: NextRequest) {
     });
 
     if (order) {
-      await prisma.order.update({
+      const updated = await prisma.order.update({
         where: { id: order.id },
         data: { status: resultCode === 0 ? 'completed' : 'failed' },
       });
+      if (resultCode === 0 && updated.email) {
+        await sendReceipt(updated).catch((e) => console.error('[Webhook/M-Pesa] receipt failed:', e));
+      }
     }
   } catch (err) {
     console.error('[Webhook/M-Pesa] Processing failed:', err);
