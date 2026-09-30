@@ -30,32 +30,66 @@ function calcTotal(items: OrderItem[]): number {
 export async function executeStripeCheckout(items: OrderItem[]): Promise<StripeToolResult> {
   const amount = calcTotal(items);
 
-  const order = await prisma.order.create({
-    data: { items: items as unknown as Prisma.InputJsonValue, amount, currency: 'KES', provider: 'stripe', status: 'pending' },
-  });
+  let order: { id: string };
+  try {
+    order = await prisma.order.create({
+      data: { items: items as unknown as Prisma.InputJsonValue, amount, currency: 'KES', provider: 'stripe', status: 'pending' },
+    });
+  } catch (err: unknown) {
+    console.error('[Stripe] Order create failed:', err);
+    return {
+      success: false,
+      paymentUrl: null,
+      orderId: 'unknown',
+      totalAmount: amount,
+      message: `Failed to create order: ${err instanceof Error ? err.message : 'DB error'}. Please try again.`,
+    };
+  }
 
-  const { url, sessionId } = await createCheckoutSession(items, order.id);
+  try {
+    const { url, sessionId } = await createCheckoutSession(items, order.id);
 
-  await prisma.order.update({
-    where: { id: order.id },
-    data: { providerRef: sessionId },
-  });
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { providerRef: sessionId },
+    }).catch((e) => console.error('[Stripe] Order update failed:', e));
 
-  return {
-    success: true,
-    paymentUrl: url,
-    orderId: order.id,
-    totalAmount: amount,
-    message: `I've created a secure payment link for KES ${amount.toLocaleString()}. Click below to pay with your card.`,
-  };
+    return {
+      success: true,
+      paymentUrl: url,
+      orderId: order.id,
+      totalAmount: amount,
+      message: `I've created a secure payment link for KES ${amount.toLocaleString()}. Click below to pay with your card.`,
+    };
+  } catch (err: unknown) {
+    console.error('[Stripe] Checkout session failed:', err);
+    await prisma.order.update({ where: { id: order.id }, data: { status: 'failed' } }).catch(() => null);
+    return {
+      success: false,
+      paymentUrl: null,
+      orderId: order.id,
+      totalAmount: amount,
+      message: `Failed to create payment link: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`,
+    };
+  }
 }
 
 export async function executeMpesaStk(phone: string, items: OrderItem[]): Promise<MpesaToolResult> {
   const amount = calcTotal(items);
 
-  const order = await prisma.order.create({
-    data: { items: items as unknown as Prisma.InputJsonValue, amount, currency: 'KES', provider: 'mpesa', status: 'pending', phone },
-  });
+  let order: { id: string };
+  try {
+    order = await prisma.order.create({
+      data: { items: items as unknown as Prisma.InputJsonValue, amount, currency: 'KES', provider: 'mpesa', status: 'pending', phone },
+    });
+  } catch (err: unknown) {
+    console.error('[M-Pesa] Order create failed:', err);
+    return {
+      success: false,
+      orderId: 'unknown',
+      message: `Failed to create order: ${err instanceof Error ? err.message : 'DB error'}. Please try again.`,
+    };
+  }
 
   try {
     const { checkoutRequestId } = await stkPush(phone, amount, order.id);
@@ -71,7 +105,8 @@ export async function executeMpesaStk(phone: string, items: OrderItem[]): Promis
       message: `An M-Pesa request of KES ${amount.toLocaleString()} has been sent to ${phone}. Please check your phone and enter your M-Pesa PIN to complete the payment.`,
     };
   } catch (err: unknown) {
-    await prisma.order.update({ where: { id: order.id }, data: { status: 'failed' } });
+    console.error('[M-Pesa] STK push failed:', err);
+    await prisma.order.update({ where: { id: order.id }, data: { status: 'failed' } }).catch(() => null);
     const message = err instanceof Error ? err.message : 'Unknown error';
     return {
       success: false,

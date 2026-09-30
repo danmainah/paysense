@@ -10,7 +10,9 @@ export async function trackUnansweredQuestion(query: string, text: string): Prom
   const lower = text.toLowerCase();
   const isUnanswered = UNANSWERED_SIGNALS.some((s) => lower.includes(s));
   if (isUnanswered && query) {
-    await prisma.unansweredQuestion.create({ data: { question: query } });
+    await prisma.unansweredQuestion.create({ data: { question: query } }).catch((e) => {
+      console.error('[Conversation] trackUnansweredQuestion failed:', e);
+    });
   }
 }
 

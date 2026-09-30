@@ -19,20 +19,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object as Stripe.Checkout.Session;
-    const orderId = session.metadata?.orderId;
-    if (orderId) {
-      await prisma.order.update({ where: { id: orderId }, data: { status: 'completed' } });
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const orderId = session.metadata?.orderId;
+      if (orderId) {
+        await prisma.order.update({ where: { id: orderId }, data: { status: 'completed' } });
+      }
     }
-  }
 
-  if (event.type === 'checkout.session.expired') {
-    const session = event.data.object as Stripe.Checkout.Session;
-    const orderId = session.metadata?.orderId;
-    if (orderId) {
-      await prisma.order.update({ where: { id: orderId }, data: { status: 'failed' } });
+    if (event.type === 'checkout.session.expired') {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const orderId = session.metadata?.orderId;
+      if (orderId) {
+        await prisma.order.update({ where: { id: orderId }, data: { status: 'failed' } });
+      }
     }
+  } catch (err) {
+    console.error('[Webhook/Stripe] DB update failed:', err);
+    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
   }
 
   return NextResponse.json({ received: true });

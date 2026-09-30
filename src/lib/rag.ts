@@ -12,35 +12,40 @@ export async function retrieveRelevantChunks(
   query: string,
   limit = 5
 ): Promise<RetrievedChunk[]> {
-  const embedding = await createEmbedding(query);
-  const vector = `[${embedding.join(',')}]`;
+  try {
+    const embedding = await createEmbedding(query);
+    const vector = `[${embedding.join(',')}]`;
 
-  const results = await prisma.$queryRaw<
-    Array<{
-      id: string;
-      content: string;
-      document_title: string;
-      similarity: number;
-    }>
-  >`
-    SELECT
-      c.id,
-      c.content,
-      d.title AS document_title,
-      1 - (c.embedding <=> ${vector}::vector) AS similarity
-    FROM chunks c
-    JOIN documents d ON c.document_id = d.id
-    WHERE c.embedding IS NOT NULL
-    ORDER BY c.embedding <=> ${vector}::vector
-    LIMIT ${limit}
-  `;
+    const results = await prisma.$queryRaw<
+      Array<{
+        id: string;
+        content: string;
+        document_title: string;
+        similarity: number;
+      }>
+    >`
+      SELECT
+        c.id,
+        c.content,
+        d.title AS document_title,
+        1 - (c.embedding <=> ${vector}::vector) AS similarity
+      FROM chunks c
+      JOIN documents d ON c.document_id = d.id
+      WHERE c.embedding IS NOT NULL
+      ORDER BY c.embedding <=> ${vector}::vector
+      LIMIT ${limit}
+    `;
 
-  return results.map((r) => ({
-    id: r.id,
-    content: r.content,
-    documentTitle: r.document_title,
-    similarity: r.similarity,
-  }));
+    return results.map((r) => ({
+      id: r.id,
+      content: r.content,
+      documentTitle: r.document_title,
+      similarity: r.similarity,
+    }));
+  } catch (err) {
+    console.error('[RAG] retrieveRelevantChunks failed:', err);
+    return [];
+  }
 }
 
 export function buildSystemPrompt(chunks: RetrievedChunk[]): string {

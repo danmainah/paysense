@@ -39,7 +39,7 @@ export async function stkPush(
       PartyA: phone,
       PartyB: process.env.MPESA_SHORTCODE,
       PhoneNumber: phone,
-      CallBackURL: `${process.env.MPESA_CALLBACK_URL}/api/webhooks/mpesa`,
+      CallBackURL: process.env.MPESA_CALLBACK_URL!,
       AccountReference: `ORDER-${orderId}`,
       TransactionDesc: `TechNairobi order ${orderId}`,
     },
