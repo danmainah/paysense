@@ -19,6 +19,10 @@ const itemSchema = z.object({
 export async function POST(req: NextRequest) {
   const { messages, conversationId } = await req.json();
 
+  // The origin the customer is actually browsing from — used for Stripe redirect URLs
+  // so payments return to the correct deployment regardless of env config.
+  const origin = req.headers.get('origin') ?? req.nextUrl.origin ?? process.env.NEXT_PUBLIC_APP_URL ?? '';
+
   const lastUserMsg = [...messages].reverse().find((m: { role: string }) => m.role === 'user');
   const query = lastUserMsg?.content ?? '';
 
@@ -41,7 +45,7 @@ export async function POST(req: NextRequest) {
         description:
           'Create a Stripe Checkout link for card payment. Call only after confirming items with the customer.',
         parameters: z.object({ items: z.array(itemSchema) }),
-        execute: ({ items }) => executeStripeCheckout(items),
+        execute: ({ items }) => executeStripeCheckout(items, origin),
       }),
 
       mpesa_stk_push: tool({

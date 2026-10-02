@@ -30,7 +30,10 @@ function calcTotal(items: OrderItem[]): number {
   return items.reduce((s, i) => s + i.price * i.quantity, 0);
 }
 
-export async function executeStripeCheckout(items: OrderItem[]): Promise<StripeToolResult> {
+export async function executeStripeCheckout(
+  items: OrderItem[],
+  baseUrl?: string
+): Promise<StripeToolResult> {
   const amount = calcTotal(items);
   const reference = generateOrderReference();
 
@@ -52,7 +55,7 @@ export async function executeStripeCheckout(items: OrderItem[]): Promise<StripeT
   }
 
   try {
-    const { url, sessionId } = await createCheckoutSession(items, order.id);
+    const { url, sessionId } = await createCheckoutSession(items, order.id, baseUrl);
 
     await prisma.order.update({
       where: { id: order.id },

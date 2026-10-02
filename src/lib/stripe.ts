@@ -12,8 +12,13 @@ export interface CheckoutItem {
 
 export async function createCheckoutSession(
   items: CheckoutItem[],
-  orderId: string
+  orderId: string,
+  baseUrl?: string
 ): Promise<{ url: string; sessionId: string }> {
+  // Prefer the live request origin so redirects work on any deployment URL;
+  // fall back to the configured app URL.
+  const origin = (baseUrl || process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '');
+
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ['card'],
     line_items: items.map((item) => ({
@@ -25,8 +30,8 @@ export async function createCheckoutSession(
       quantity: item.quantity,
     })),
     mode: 'payment',
-    success_url: `${process.env.NEXT_PUBLIC_APP_URL}/chat?payment=success&order=${orderId}`,
-    cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/chat?payment=cancelled`,
+    success_url: `${origin}/chat?payment=success&order=${orderId}`,
+    cancel_url: `${origin}/chat?payment=cancelled`,
     metadata: { orderId },
   });
 
