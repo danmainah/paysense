@@ -24,6 +24,66 @@ type ResolveResult =
   | { ok: true; items: OrderItem[] }
   | { ok: false; message: string };
 
+interface ProductRow {
+  name: string;
+  price: number;
+  inStock: boolean;
+}
+
+type ProductMatch =
+  | { kind: 'found'; product: ProductRow }
+  | { kind: 'ambiguous'; candidates: string[] }
+  | { kind: 'none' };
+
+/** Lowercase, strip punctuation, collapse whitespace — for lenient name comparison. */
+function normalizeName(s: string): string {
+  return (s ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Match a customer-supplied product name to a catalog product using
+ * progressively looser strategies. This only decides *which* product is
+ * selected — the price always comes from that product's DB row, so a fuzzy
+ * match can never produce an injected/discounted price, only (at worst) an
+ * ambiguity we bounce back to the customer.
+ */
+function findProduct(query: string, products: ProductRow[]): ProductMatch {
+  const q = normalizeName(query);
+  if (!q) return { kind: 'none' };
+
+  const norm = products.map((p) => ({ p, n: normalizeName(p.name) }));
+
+  const resolve = (matches: Array<{ p: ProductRow }>): ProductMatch | null => {
+    if (matches.length === 1) return { kind: 'found', product: matches[0].p };
+    if (matches.length > 1) return { kind: 'ambiguous', candidates: matches.map((m) => m.p.name) };
+    return null;
+  };
+
+  // 1. Exact (normalized) match.
+  const exact = resolve(norm.filter((x) => x.n === q));
+  if (exact) return exact;
+
+  // 2. Substring containment in either direction (e.g. "macbook" ↔ "MacBook Air M2").
+  const contains = resolve(norm.filter((x) => x.n.includes(q) || q.includes(x.n)));
+  if (contains) return contains;
+
+  // 3. Token overlap — every word of the query appears in the product name.
+  const qTokens = q.split(' ').filter(Boolean);
+  const tokens = resolve(
+    norm.filter((x) => {
+      const words = new Set(x.n.split(' '));
+      return qTokens.every((t) => words.has(t));
+    })
+  );
+  if (tokens) return tokens;
+
+  return { kind: 'none' };
+}
+
 /**
  * Resolve customer-requested items to priced order items using the database
  * catalog as the single source of truth. The incoming `price` (if any) is
@@ -39,19 +99,25 @@ async function resolveItems(requested: RequestedItem[]): Promise<ResolveResult> 
   const products = await prisma.product.findMany({
     select: { name: true, price: true, inStock: true },
   });
-  const byName = new Map(products.map((p) => [p.name.trim().toLowerCase(), p]));
 
   const items: OrderItem[] = [];
   for (const req of requested) {
-    const key = (req.name ?? '').trim().toLowerCase();
-    const product = byName.get(key);
+    const match = findProduct(req.name, products);
 
-    if (!product) {
+    if (match.kind === 'none') {
       return {
         ok: false,
         message: `"${req.name}" isn't in our catalog, so I can't create a payment for it. Please choose a product from the catalog.`,
       };
     }
+    if (match.kind === 'ambiguous') {
+      return {
+        ok: false,
+        message: `"${req.name}" matches a few products: ${match.candidates.join(', ')}. Which one would you like?`,
+      };
+    }
+
+    const product = match.product;
     if (!product.inStock) {
       return {
         ok: false,
