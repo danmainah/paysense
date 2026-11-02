@@ -10,10 +10,12 @@ import { trackUnansweredQuestion, persistConversation } from '@/lib/conversation
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
+// NOTE: no `price` field. Prices are resolved server-side from the product
+// catalog in payment-tools.ts, so the model cannot set or alter a price
+// (prompt-injection defence). The model only supplies name + quantity.
 const itemSchema = z.object({
-  name: z.string().describe('Product name'),
-  price: z.number().positive().describe('Price in KES'),
-  quantity: z.number().int().positive(),
+  name: z.string().describe('Exact product name from the catalog'),
+  quantity: z.number().int().positive().describe('Number of units'),
 });
 
 export async function POST(req: NextRequest) {
